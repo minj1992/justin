@@ -1,0 +1,7 @@
+python pipeline_full11_corrected.py \
+  --runner=DataflowRunner --project=$PROJECT_ID --region=us-central1 \
+  --temp_location=gs://afs-poc-data/temp \
+  --project_for_subs=$PROJECT_ID --bigtable_instance=afs-poc-bigtable \
+  --alloydb_connection=projects/$PROJECT_ID/locations/us-central1/clusters/afs-poc-alloydb/instances/afs-poc-alloydb-primary \
+  --alloydb_user=postgres --alloydb_password=YOUR_PASSWORD --alloydb_db=afs_lab1 \
+  --job_name=afs-poc-job2-dual-write
