@@ -1,0 +1,142 @@
+"""
+pipeline_full11_corrected.py  --  all 11 topics, REAL topic routing
+
+Corrected from the earlier one-topic-per-table version. Matches the
+real Lab 1 document: only 2 real Pub/Sub topics exist --
+common-loan-topic and common-customer-topic. Every message carries
+a "topic_name" field saying which of the 11 tables it is for; the
+pipeline reads from the 2 real subscriptions and filters internally.
+
+UNCONFIRMED: T33 (product-rates) is routed to common-loan-topic here
+as a judgment call -- it is reference data, not clearly loan or
+customer data, and no source document confirms its real topic.
+
+Local test: python pipeline_full11_corrected.py --runner=DirectRunner
+"""
+
+import argparse, json
+import apache_beam as beam
+from apache_beam.options.pipeline_options import PipelineOptions, GoogleCloudOptions
+
+ID_PAD_RULES = {"obligorNumber": 11, "obligationNumber": 10}
+
+def clean_and_pad(record):
+    out = dict(record)
+    for field, width in ID_PAD_RULES.items():
+        if field in out and out[field]:
+            out[field] = str(out[field]).zfill(width)
+    return out
+
+# (code, topic_name value, real Pub/Sub topic, pk, fk_fields, Bigtable/SQL table, all columns)
+BRANCHES = [
+    ("T23", "account-loanslinesleases-lcm", "common-loan-topic", "accountLoanslinesleasesLcmId", [], "TOPIC_account_loanslinesleases_lcm", ['accountLoanslinesleasesLcmId', 'accountLoanslinesleaseId', 'applicationNumber', 'applicationSystem', 'bankNumber', 'financialInstrumentNumber', 'obligationNumber', 'obligorNumber', 'externalSourceTicklerReference']),
+    ("T33", "product-rates", "common-loan-topic", "productRateId", [], "TOPIC_product_rates", ['productRateId', 'applicationNumber', 'applicationSystem', 'bankNumber', 'effectiveDate', 'effectiveTime', 'externalSourceCustomerNameReference', 'rateNumber', 'sequenceNumber']),
+    ("T19", "customer-supplementals", "common-customer-topic", "customerSupplementalId", [], "TOPIC_customer_supplementals", ['customerSupplementalId', 'customerId', 'applicationNumber', 'applicationSystem', 'bankNumber', 'obligorNumber']),
+    ("T13", "account-loanslinesleases-lcm-postedtransactions", "common-loan-topic", "accountLoanslinesleasesLcmPostedtransactionId", ['accountLoanslinesleaseId'], "account_loanslinesleases_lcm_postedtransactions", ['accountLoanslinesleasesLcmPostedtransactionId', 'accountLoanslinesleaseId', 'applicationNumber', 'applicationSystem', 'bankNumber', 'effectiveDate', 'financialInstrumentNumber', 'obligationNumber', 'obligorNumber', 'offSetSequenceNumber', 'sequenceNumber', 'transactionRecordedTimestamp']),
+    ("T26", "account-supplementals", "common-loan-topic", "accountSupplementalId", ['accountId'], "TOPIC_account_supplementals", ['accountSupplementalId', 'accountId', 'applicationNumber', 'applicationSystem', 'bankNumber', 'financialInstrumentNumber', 'obligationNumber', 'obligorNumber']),
+    ("T8", "account-loanslinesleases-chargeheaders", "common-loan-topic", "accountLoanslinesleasesChargeheaderId", ['accountLoanslinesleaseId'], "TOPIC_account_loanslinesleases_chargeheaders", ['accountLoanslinesleasesChargeheaderId', 'accountLoanslinesleaseId', 'applicationNumber', 'applicationSystem', 'bankNumber', 'chargeCode', 'financialInstrumentNumber', 'obligationNumber', 'obligorNumber']),
+    ("T41", "account-relationships-accounts-supplemental", "common-loan-topic", "accountRelationshipsAccountsSupplementalId", ['accountRelationshipsAccountId'], "TOPIC_account_relationships_accounts_supplemental", ['accountRelationshipsAccountsSupplementalId', 'accountRelationshipsAccountId', 'applicationSystem', 'financialInstrumentNumber', 'obligationNumber']),
+    ("T7", "account-loanslinesleases-balanceheaders", "common-loan-topic", "accountLoanslinesleasesBalanceheaderId", ['accountLoanslinesleaseId'], "TOPIC_account_loanslinesleases_balanceheaders", ['accountLoanslinesleasesBalanceheaderId', 'accountLoanslinesleaseId', 'applicationSystem', 'associatedPrincipalBalanceCode', 'balanceCode', 'bankNumber', 'financialInstrumentNumber', 'obligationNumber', 'obligorNumber', 'sequenceNumber']),
+    ("T11", "account-loanslinesleases-billingschedules", "common-loan-topic", "accountLoanslinesleasesBillingscheduleId", ['accountLoanslinesleaseId', 'productRateId'], "TOPIC_account_loanslinesleases_billingschedules", ['accountLoanslinesleasesBillingscheduleId', 'accountLoanslinesleaseId', 'productRateId', 'applicationNumber', 'applicationSystem', 'bankNumber', 'chargeCode', 'effectiveStartDate', 'financialInstrumentNumber', 'obligationNumber', 'obligorNumber']),
+    ("T12", "account-loanslinesleases-chargeheaders-amounts", "common-loan-topic", "accountLoanslinesleasesChargeheadersAmountId", ['accountLoanslinesleasesChargeheaderId'], "account_loanslinesleases_chargeheaders_amounts", ['accountLoanslinesleasesChargeheadersAmountId', 'accountLoanslinesleasesChargeheaderId', 'amountFieldName', 'applicationNumber', 'applicationSystem', 'bankNumber', 'chargeCode', 'financialInstrumentNumber', 'obligationNumber', 'obligorNumber']),
+    ("T15", "account-loanslinesleases-balanceheaders-amounts", "common-loan-topic", "accountLoanslinesleasesBalanceheadersAmountId", ['accountLoanslinesleasesBalanceheaderId'], "account_loanslinesleases_balanceheaders_amounts", ['accountLoanslinesleasesBalanceheadersAmountId', 'accountLoanslinesleasesBalanceheaderId', 'amountFieldName', 'applicationNumber', 'applicationSystem', 'associatedPrincipalBalanceCode', 'balanceCode', 'bankNumber', 'financialInstrumentNumber', 'obligationNumber', 'obligorNumber', 'sequenceNumber']),
+]
+
+def _load_sample_data():
+    # Only ever called from inside local_mode (see run() below) -- a real
+    # DataflowRunner run never touches this file, so it no longer needs
+    # to exist on the machine launching a real job.
+    sample_data = json.load(open("dummy_all11_with_topicname.json"))
+    return [r for recs in sample_data.values() for r in recs]
+
+def row_key_for(record, pk_field, fk_fields):
+    if fk_fields:
+        return f"{record[fk_fields[0]]}#{record[pk_field]}"
+    return record[pk_field]
+
+def to_bigtable_mutation(record, pk_field, fk_fields):
+    from google.cloud.bigtable.row import DirectRow
+    row = DirectRow(row_key=row_key_for(record, pk_field, fk_fields).encode("utf-8"))
+    for k, v in record.items():
+        row.set_cell("data", k, str(v) if v is not None else "", timestamp=None)
+    return row
+
+class WriteToAlloyDB(beam.DoFn):
+    def __init__(self, connection_name, user, password, db, sql_table, columns):
+        self.connection_name, self.user, self.password, self.db = connection_name, user, password, db
+        self.sql_table, self.columns = sql_table, columns
+        self.connector = self.conn = None
+
+    def setup(self):
+        from google.cloud.alloydb.connector import Connector
+        self.connector = Connector()
+        self.conn = self.connector.connect(self.connection_name, "pg8000",
+                                            user=self.user, password=self.password, db=self.db)
+
+    def process(self, record):
+        cols = ", ".join(self.columns)
+        placeholders = ", ".join(["%s"] * len(self.columns))
+        values = [record.get(c) for c in self.columns]
+        sql = f"INSERT INTO {self.sql_table} ({cols}) VALUES ({placeholders})"
+        cur = self.conn.cursor(); cur.execute(sql, values); self.conn.commit(); cur.close()
+        yield record
+
+    def teardown(self):
+        if self.conn: self.conn.close()
+        if self.connector: self.connector.close()
+
+def run():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project_for_subs", default=None)
+    parser.add_argument("--bigtable_instance", default=None)
+    parser.add_argument("--alloydb_connection", default=None)
+    parser.add_argument("--alloydb_user", default=None)
+    parser.add_argument("--alloydb_password", default=None)
+    parser.add_argument("--alloydb_db", default=None)
+    known_args, pipeline_args = parser.parse_known_args()
+    local_mode = known_args.project_for_subs is None
+    options = PipelineOptions(pipeline_args, streaming=not local_mode)
+
+    with beam.Pipeline(options=options) as p:
+        if local_mode:
+            all_sample_messages = _load_sample_data()
+            loan_msgs = p | "Sample loan" >> beam.Create(
+                [r for r in all_sample_messages if r["topic_name"] != "customer-supplementals"])
+            cust_msgs = p | "Sample cust" >> beam.Create(
+                [r for r in all_sample_messages if r["topic_name"] == "customer-supplementals"])
+        else:
+            loan_sub = f"projects/{known_args.project_for_subs}/subscriptions/common-loan-topic-sub"
+            cust_sub = f"projects/{known_args.project_for_subs}/subscriptions/common-customer-topic-sub"
+            loan_msgs = (p | "Read loan" >> beam.io.ReadFromPubSub(subscription=loan_sub)
+                           | "Parse loan" >> beam.Map(lambda b: json.loads(b.decode("utf-8"))))
+            cust_msgs = (p | "Read cust" >> beam.io.ReadFromPubSub(subscription=cust_sub)
+                           | "Parse cust" >> beam.Map(lambda b: json.loads(b.decode("utf-8"))))
+
+        for code, topic_name_val, real_topic_val, pk_field, fk_fields, bt_table, columns in BRANCHES:
+            source = cust_msgs if real_topic_val == "common-customer-topic" else loan_msgs
+            records = source | f"Filter {code}" >> beam.Filter(
+                lambda r, tn=topic_name_val: r.get("topic_name") == tn)
+            cleaned = records | f"Clean {code}" >> beam.Map(clean_and_pad)
+
+            if local_mode or not known_args.bigtable_instance:
+                cleaned | f"PrintBT {code}" >> beam.Map(
+                    lambda r, pk=pk_field, fk=fk_fields, bt=bt_table: print(f"[Bigtable:{bt}] key={row_key_for(r,pk,fk)}"))
+            else:
+                from apache_beam.io.gcp.bigtableio import WriteToBigTable
+                project_id = options.view_as(GoogleCloudOptions).project
+                (cleaned | f"BuildBT {code}" >> beam.Map(to_bigtable_mutation, pk_field=pk_field, fk_fields=fk_fields)
+                         | f"WriteBT {code}" >> WriteToBigTable(project_id=project_id,
+                               instance_id=known_args.bigtable_instance, table_id=bt_table))
+
+            if local_mode or not known_args.alloydb_connection:
+                cleaned | f"PrintSQL {code}" >> beam.Map(
+                    lambda r, t=bt_table, c=columns: print(
+                        f"[AlloyDB:{t}] INSERT ({chr(44).join(c)}) VALUES ({chr(44).join(repr(r.get(x)) for x in c)})"))
+            else:
+                cleaned | f"WriteSQL {code}" >> beam.ParDo(WriteToAlloyDB(
+                    connection_name=known_args.alloydb_connection, user=known_args.alloydb_user,
+                    password=known_args.alloydb_password, db=known_args.alloydb_db,
+                    sql_table=bt_table, columns=columns))
+
+if __name__ == "__main__":
+    run()
