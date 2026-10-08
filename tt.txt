@@ -5,3 +5,69 @@ python pipeline_full11_corrected.py \
   --alloydb_connection=projects/$PROJECT_ID/locations/us-central1/clusters/afs-poc-alloydb/instances/afs-poc-alloydb-primary \
   --alloydb_user=postgres --alloydb_password=YOUR_PASSWORD --alloydb_db=afs_lab1 \
   --job_name=afs-poc-job2-dual-write
+
+
+
+
+## Bigtable Studio
+
+**Where to find it:**
+1. In the Cloud Console, click the **☰ navigation menu** (top-left) → under **Databases**, click **Bigtable**
+2. Click your instance: **afs-poc-bigtable**
+3. In the left-side panel, click **Studio**
+4. You'll see a query editor with a **Run** button (top-right of the editor)
+
+**Query to check all 11 tables at once** — paste this in and click Run:
+```sql
+SELECT 'TOPIC_account_loanslinesleases_lcm' AS table_name, COUNT(*) AS row_count FROM TOPIC_account_loanslinesleases_lcm
+UNION ALL SELECT 'TOPIC_product_rates', COUNT(*) FROM TOPIC_product_rates
+UNION ALL SELECT 'TOPIC_customer_supplementals', COUNT(*) FROM TOPIC_customer_supplementals
+UNION ALL SELECT 'account_loanslinesleases_lcm_postedtransactions', COUNT(*) FROM account_loanslinesleases_lcm_postedtransactions
+UNION ALL SELECT 'TOPIC_account_supplementals', COUNT(*) FROM TOPIC_account_supplementals
+UNION ALL SELECT 'TOPIC_account_loanslinesleases_chargeheaders', COUNT(*) FROM TOPIC_account_loanslinesleases_chargeheaders
+UNION ALL SELECT 'TOPIC_account_relationships_accounts_supplemental', COUNT(*) FROM TOPIC_account_relationships_accounts_supplemental
+UNION ALL SELECT 'TOPIC_account_loanslinesleases_balanceheaders', COUNT(*) FROM TOPIC_account_loanslinesleases_balanceheaders
+UNION ALL SELECT 'TOPIC_account_loanslinesleases_billingschedules', COUNT(*) FROM TOPIC_account_loanslinesleases_billingschedules
+UNION ALL SELECT 'account_loanslinesleases_chargeheaders_amounts', COUNT(*) FROM account_loanslinesleases_chargeheaders_amounts
+UNION ALL SELECT 'account_loanslinesleases_balanceheaders_amounts', COUNT(*) FROM account_loanslinesleases_balanceheaders_amounts;
+```
+**Expected: 2 in every row.**
+
+**To actually see the data** (row key + the `data` column family), pick one table:
+```sql
+SELECT _key, data FROM TOPIC_account_loanslinesleases_lcm;
+```
+That shows you the real row keys (e.g. `T23-0001`) and the field values stored inside. If `data` comes back as an empty map, the write happened but with the wrong column family name — worth flagging if you see that.
+
+## AlloyDB Studio
+
+**Where to find it:**
+1. **☰ navigation menu** → under **Databases**, click **AlloyDB for PostgreSQL**
+2. Click your cluster: **afs-poc-alloydb**
+3. Click **AlloyDB Studio** in the left-side panel
+4. It'll prompt you to sign in — **Database:** `afs_lab1`, **User:** `postgres`, **Password:** the one you set (`Login%123456789` from your setup)
+5. Click **Open Editor** / the **+ New tab** icon, paste a query, and click **Run** (or Ctrl+Enter)
+
+**Same all-11-tables count check:**
+```sql
+SELECT 'TOPIC_account_loanslinesleases_lcm' AS table_name, COUNT(*) FROM "TOPIC_account_loanslinesleases_lcm"
+UNION ALL SELECT 'TOPIC_product_rates', COUNT(*) FROM "TOPIC_product_rates"
+UNION ALL SELECT 'TOPIC_customer_supplementals', COUNT(*) FROM "TOPIC_customer_supplementals"
+UNION ALL SELECT 'account_loanslinesleases_lcm_postedtransactions', COUNT(*) FROM "account_loanslinesleases_lcm_postedtransactions"
+UNION ALL SELECT 'TOPIC_account_supplementals', COUNT(*) FROM "TOPIC_account_supplementals"
+UNION ALL SELECT 'TOPIC_account_loanslinesleases_chargeheaders', COUNT(*) FROM "TOPIC_account_loanslinesleases_chargeheaders"
+UNION ALL SELECT 'TOPIC_account_relationships_accounts_supplemental', COUNT(*) FROM "TOPIC_account_relationships_accounts_supplemental"
+UNION ALL SELECT 'TOPIC_account_loanslinesleases_balanceheaders', COUNT(*) FROM "TOPIC_account_loanslinesleases_balanceheaders"
+UNION ALL SELECT 'TOPIC_account_loanslinesleases_billingschedules', COUNT(*) FROM "TOPIC_account_loanslinesleases_billingschedules"
+UNION ALL SELECT 'account_loanslinesleases_chargeheaders_amounts', COUNT(*) FROM "account_loanslinesleases_chargeheaders_amounts"
+UNION ALL SELECT 'account_loanslinesleases_balanceheaders_amounts', COUNT(*) FROM "account_loanslinesleases_balanceheaders_amounts";
+```
+
+**To see the actual rows:**
+```sql
+SELECT * FROM "TOPIC_account_loanslinesleases_lcm";
+```
+
+**Quick way to read the results:** both tools show results as a table right under the editor — no separate "results" page to navigate to.
+
+If any Bigtable count is `0` but the matching AlloyDB count has data (or vice versa), that tells you the dual-write split somewhere in Job 2 — useful to know which side to debug first.
