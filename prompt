@@ -1,0 +1,39 @@
+ask: Fix two live bugs in build_obligation_pipeline.py (Imaan's AFS obligation pipeline) ahead of the client demo
+
+Context:
+This pipeline reads 10 topic JSONL files (BOL → OBL → Topic → AFS lineage), joins them per obligation (OBLIGOR_NUMBER + OBLIGATION_NUMBER), applies the Column C transforms and the 6 calculated business-rule fields, and writes two Bigtable tables: Table A (full) and Table B (essential). This is the version going to the client presentation.
+
+Source of truth: The live lineage workbook, specifically:
+
+Tab BOL>OBL>Topic->AFS
+Tab Business Rules -Cal fields (rows 3–9 define the 6 calculated fields: CURR_PRIN_BAL_AMT, CURR_LINE_AMT, LOAN_LINE_TYPE, BALANCE, INTEREST_PAID_YTD, INT_PAYMENT_DATE)
+
+No field or logic may be invented beyond what this sheet and the pipeline's own write-up (Obligation_pipeline_writeup.md, 9-item issue register) state. Any gap not sourced in the sheet must be left as an explicit off-by-default extension point, not guessed.
+
+Bugs reported live (verbatim from the Imaan/Hemanth sync):
+
+"Some of the loan line types come in as null."
+"Some of the balance amounts are a little bit weird... not even sure if they should be negative."
+
+Required fix — Bug 1 (null LOAN_LINE_TYPE):
+Root cause: the join between account_relationships_accounts_supplementals, account-supplementals, and account-loanslinesleases-lcm (row 5 of the Business Rules tab, used in resolve_loan_line()'s takedown-chain walk) is an exact string match on OBLIGOR_NUMBER/OBLIGATION_NUMBER. The write-up's own ISSUE 3 flags that zero-padding format between topics is unconfirmed. A format mismatch (e.g. "10" vs "0000000010") causes a silent miss → null.
+Fix required: try the exact key first (so clean/consistent data behaves identically), fall back to a zero-padding-normalized key only on a miss. Must not change output on any existing passing test scenario.
+
+Required fix — Bug 2 (wonky BALANCE):
+Root cause: when more than one candidate transaction or balance-header record exists for an obligation, the code picks "whichever one is first in the list Beam hands back" (posted_txn_recs[0], unsorted scan for BALH299/balanceCode=10) — not guaranteed stable between runs, per the write-up's own ISSUE 1 note. The BALANCE formula itself (rows 6–7 of the sheet) is correct and must not be changed.
+Fix required: make the record selection deterministic — sort candidates by recorded timestamp / source sequence number and always pick the same one (most recent).
+
+Also close, while in there (both already flagged as open issues in the write-up):
+
+SEQUENCE_NUMBER (ISSUE 2) — currently never populated. Add a pipeline-local, parallel-safe default: the chosen transaction's 1-based rank among that obligation's own transactions, oldest-first. Do not read "max from destination table" — unsafe with parallel Dataflow workers.
+productCode 15/16 exclusion (ISSUE 4, row 2 of the sheet) — stated as a business rule but not sourced to any field anywhere in the workbook (verified across all 5 tabs). Add a named constant/switch that is off by default, not a guessed field.
+
+Explicitly out of scope — do not touch:
+
+ISSUE 1: one-row-per-transaction redesign (needs a row-key design decision)
+ISSUE 5/6/7/8: which process-type list is authoritative, INTEREST_PAID_YTD year filter, INT_PAYMENT_DATE format, differing null defaults across legacy interfaces — all business/data-owner questions
+
+Acceptance criteria:
+Re-run all 9 scenarios in the write-up's Section 8 test matrix (3 copies, 57 rows) — every documented expected value must still match exactly. Any new behavior may only trigger on cases the current test data doesn't cover (e.g., mismatched padding, multiple candidate records).
+
+That's the full, self-contained version — everything needed to fix Imaan's pipeline with no other context required.
