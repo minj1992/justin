@@ -1,0 +1,6 @@
+Null loan line type — the code was matching account IDs between files as exact text. When one file writes an ID as 10 and another writes it as 0000000010, the match was failing silently and returning blank. Fixed it so it tries the exact match first, and if that fails, tries again after removing the extra zeros.
+Weird/inconsistent balance — when there was more than one matching record to pick from, the code was just grabbing whichever one came first in an unordered list — not guaranteed to be the same every run. Fixed it to always sort and pick the most recent one, every time. Your balance formula itself was correct — this was only about which record feeds into it.
+Also filled in two small things that were already in your own notes as pending: SEQUENCE_NUMBER was never being set, so it's now populated. And the file TOPIC_product_rates was being generated but never read — it's now read in (not used for any field yet, since nothing maps to it).
+Left the productCode 15/16 rule exactly as it was — off, since nothing in the lineage sheet actually points to a real field for it. Added a single switch so it's a one-line change once that's confirmed.
+
+Nothing else was touched — same structure, same functions, same formulas everywhere else.
