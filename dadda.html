@@ -1,0 +1,872 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Loan A Data Trace</title>
+<style>
+/* Layout: a ledger — raw input rows at top, a transform divider, final output table below,
+   then three zoom-in calculation cards for the fields that aren't a straight copy. */
+:root{
+  --bg:#ffffff; --surface:#f6f6f5; --surface-2:#ececea; --border:#d8d8d5; --border-strong:#b8b8b4;
+  --ink:#17171a; --ink-dim:#55555c; --ink-faint:#8a8a90;
+  --mono:'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  --sans:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --keep:#17171a; --drop:#b8b8b4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121214; --surface:#1b1b1e; --surface-2:#222226; --border:#333338; --border-strong:#46464c;
+    --ink:#ececec; --ink-dim:#a8a8ad; --ink-faint:#747479;
+    --keep:#ececec; --drop:#5a5a60;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121214; --surface:#1b1b1e; --surface-2:#222226; --border:#333338; --border-strong:#46464c;
+  --ink:#ececec; --ink-dim:#a8a8ad; --ink-faint:#747479;
+  --keep:#ececec; --drop:#5a5a60;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);margin:0;line-height:1.5;-webkit-font-smoothing:antialiased}
+.page{max-width:760px;margin:0 auto;padding:32px 20px 80px}
+@media (max-width:480px){.page{padding:24px 16px 60px}}
+
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 6px}
+h1{font-size:24px;margin:0 0 10px;letter-spacing:-.01em;text-wrap:balance}
+.context{color:var(--ink-dim);font-size:14px;max-width:62ch;margin:0 0 28px}
+.context code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint);margin:36px 0 12px;display:flex;align-items:center;gap:10px}
+h2::after{content:"";flex:1;height:1px;background:var(--border)}
+
+/* raw input panels */
+.src{border:1px solid var(--border);border-radius:9px;background:var(--surface);margin-bottom:12px;overflow:hidden}
+.src summary{list-style:none;cursor:pointer;padding:11px 14px;font-family:var(--mono);font-size:12.5px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.src summary::-webkit-details-marker{display:none}
+.src summary .fname{color:var(--ink)}
+.src summary .meta{color:var(--ink-faint);font-size:11px;white-space:nowrap}
+.src summary::before{content:"▸";display:inline-block;margin-right:8px;color:var(--ink-faint);transition:transform .15s}
+.src[open] summary::before{transform:rotate(90deg)}
+.src pre{margin:0;padding:0 14px 14px;overflow-x:auto}
+.src code{font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--ink-dim);white-space:pre}
+.src code .k{color:var(--ink)}
+
+.divider{display:flex;align-items:center;gap:14px;margin:34px 0;color:var(--ink-faint);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:repeating-linear-gradient(90deg,var(--border-strong) 0 6px,transparent 6px 11px)}
+
+/* output table */
+.out{border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.row{display:grid;grid-template-columns:168px 110px 1fr;gap:14px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:baseline}
+.row:last-child{border-bottom:none}
+.row:nth-child(odd){background:var(--surface)}
+@media (max-width:560px){.row{grid-template-columns:1fr;gap:3px;padding:12px 14px}}
+.fname{font-family:var(--mono);font-size:12px;color:var(--ink-dim)}
+.fval{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
+.fval.null{color:var(--ink-faint);font-weight:400;font-style:italic}
+.fnote{font-size:12px;color:var(--ink-faint)}
+.fnote a{color:var(--ink-dim);text-decoration:underline}
+.row.calc .fname::before{content:"∑ ";color:var(--ink-faint)}
+
+/* calc zoom cards */
+.calc-card{border:1px solid var(--border-strong);border-radius:9px;padding:16px 18px;margin-bottom:16px;background:var(--surface)}
+.calc-card h3{font-family:var(--mono);font-size:13px;margin:0 0 4px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.calc-card h3 .result{color:var(--ink)}
+.calc-card .rule{font-size:12px;color:var(--ink-faint);margin:0 0 12px}
+.ledger{font-family:var(--mono);font-size:12px;width:100%;border-collapse:collapse}
+.ledger td{padding:4px 6px;border-bottom:1px solid var(--border);vertical-align:top}
+.ledger tr:last-child td{border-bottom:none}
+.ledger .kept{color:var(--keep)}
+.ledger .dropped{color:var(--drop);text-decoration:line-through}
+.ledger .why{color:var(--ink-faint);font-family:var(--sans);font-size:11.5px}
+.sum{margin-top:10px;padding-top:10px;border-top:1px solid var(--border-strong);font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+
+.foot{margin-top:40px;font-size:12px;color:var(--ink-faint)}
+
+/* diagrams */
+.fig{margin:0 0 30px;padding:18px 18px 14px;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.fig svg{width:100%;height:auto;display:block;color:var(--ink)}
+.fig svg text{fill:currentColor;font-family:var(--mono)}
+.fig svg .lbl{fill:var(--ink-dim);font-family:var(--sans)}
+.fig svg .dim{fill:var(--ink-faint)}
+.fig svg .box{fill:var(--surface);stroke:var(--border-strong);stroke-width:1.25}
+.fig svg .box-strong{fill:var(--surface-2);stroke:var(--ink);stroke-width:1.5}
+.fig svg .arrow{stroke:currentColor;stroke-width:1.4;fill:none}
+.fig svg .arrow-drop{stroke:var(--ink-faint);stroke-width:1.2;fill:none;stroke-dasharray:3 3}
+figcaption{font-size:12px;color:var(--ink-faint);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.fig-title{font-size:13px;font-weight:600;color:var(--ink);margin:0 0 4px;font-family:var(--sans)}
+
+/* column atlas — one compact card per Table A field */
+.atlas-group{margin-bottom:24px}
+.atlas-group h3{font-family:var(--mono);font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;margin:0 0 10px}
+.acard{border:1px solid var(--border);border-radius:8px;margin-bottom:7px;background:var(--surface);overflow:hidden}
+.acard svg{width:100%;height:auto;display:block;color:var(--ink)}
+.acard svg text{fill:currentColor;font-family:var(--mono)}
+.acard svg .lbl{fill:var(--ink-dim);font-family:var(--sans)}
+.acard svg .dim{fill:var(--ink-faint);font-family:var(--sans)}
+.acard svg .box{fill:var(--surface);stroke:var(--border-strong);stroke-width:1.1}
+.acard svg .box-strong{fill:var(--surface-2);stroke:var(--ink);stroke-width:1.3}
+.acard svg .arrow{stroke:currentColor;stroke-width:1.2;fill:none}
+.acard svg .jump{fill:var(--ink-dim);text-decoration:underline;font-family:var(--sans);font-size:9.5px}
+.atlas-note{font-size:12px;color:var(--ink-faint);margin:10px 0 24px}
+</style>
+
+<div class="page">
+  <p class="eyebrow">Scenario 0 · Loan A</p>
+  <h1>One loan, end to end</h1>
+  <p class="context">Obligor <code>10000</code>, obligation <code>1000</code>, process type <code>CRBRN-N</code> — a plain loan, no parent line. This is the actual output of running <code>generate_dummy_data_all11_fixed.py</code> then feeding it through <code>build_records()</code>, not a worked-by-hand example — every value below is real.</p>
+
+  <h2>Start here — in words you already know</h2>
+
+  <figure class="fig">
+    <p class="fig-title">A data pipeline is a CI/CD pipeline for records instead of code</p>
+    <svg viewBox="0 0 680 230" role="img" aria-label="A CI/CD pipeline's commit, build, test, deploy and running-app stages map one to one onto a data pipeline's source file, transform, filter, load and finished-table stages.">
+      <defs>
+        <marker id="arrow0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text class="dim" x="20" y="22" font-size="10.5" letter-spacing="0.04em">YOU ALREADY KNOW THIS</text>
+      <rect class="box" x="20" y="34" width="128" height="46" rx="6"/>
+      <text x="84" y="62" font-size="11.5" text-anchor="middle">a commit</text>
+      <rect class="box" x="176" y="34" width="128" height="46" rx="6"/>
+      <text x="240" y="62" font-size="11.5" text-anchor="middle">build / test</text>
+      <rect class="box" x="332" y="34" width="128" height="46" rx="6"/>
+      <text x="396" y="62" font-size="11.5" text-anchor="middle">deploy</text>
+      <rect class="box" x="488" y="34" width="172" height="46" rx="6"/>
+      <text x="574" y="62" font-size="11.5" text-anchor="middle">the running app</text>
+
+      <path class="arrow" d="M148,57 L176,57" marker-end="url(#arrow0)"/>
+      <path class="arrow" d="M304,57 L332,57" marker-end="url(#arrow0)"/>
+      <path class="arrow" d="M460,57 L488,57" marker-end="url(#arrow0)"/>
+
+      <line x1="20" y1="100" x2="660" y2="100" class="arrow-drop"/>
+
+      <text class="dim" x="20" y="128" font-size="10.5" letter-spacing="0.04em">THIS PROJECT, SAME SHAPE</text>
+      <rect class="box-strong" x="20" y="140" width="128" height="46" rx="6"/>
+      <text x="84" y="162" font-size="11" text-anchor="middle">a JSON file</text>
+      <text class="dim" x="84" y="177" font-size="9.5" text-anchor="middle">("topic" file)</text>
+
+      <rect class="box-strong" x="176" y="140" width="128" height="46" rx="6"/>
+      <text x="240" y="162" font-size="11" text-anchor="middle">transform</text>
+      <text class="dim" x="240" y="177" font-size="9.5" text-anchor="middle">pad, filter, sum</text>
+
+      <rect class="box-strong" x="332" y="140" width="128" height="46" rx="6"/>
+      <text x="396" y="162" font-size="11" text-anchor="middle">load</text>
+      <text class="dim" x="396" y="177" font-size="9.5" text-anchor="middle">write the row</text>
+
+      <rect class="box-strong" x="488" y="140" width="172" height="46" rx="6"/>
+      <text x="574" y="162" font-size="11" text-anchor="middle">the finished row</text>
+      <text class="dim" x="574" y="177" font-size="9.5" text-anchor="middle">sitting in Bigtable</text>
+
+      <path class="arrow" d="M148,163 L176,163" marker-end="url(#arrow0)"/>
+      <path class="arrow" d="M304,163 L332,163" marker-end="url(#arrow0)"/>
+      <path class="arrow" d="M460,163 L488,163" marker-end="url(#arrow0)"/>
+    </svg>
+    <figcaption>Same 4 stages, same order. "Transform" is just a function — like a shell step in a pipeline stage — that takes one value in and puts a changed value out.</figcaption>
+  </figure>
+
+  <figure class="fig">
+    <p class="fig-title">Bigtable is a key → value store, like Redis or a Kubernetes ConfigMap</p>
+    <svg viewBox="0 0 680 150" role="img" aria-label="A unique key, obligor number hash obligation number, points to a value holding every field for that one loan, the same shape as a ConfigMap name pointing to its data.">
+      <defs>
+        <marker id="arrowkv" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box-strong" x="30" y="40" width="230" height="60" rx="6"/>
+      <text x="145" y="66" font-size="11" text-anchor="middle" font-weight="600">KEY</text>
+      <text x="145" y="86" font-size="11" text-anchor="middle">00000010000#0000001000</text>
+      <path class="arrow" d="M260,70 L330,70" marker-end="url(#arrowkv)"/>
+      <text class="lbl" x="295" y="60" font-size="10" text-anchor="middle">points to</text>
+      <rect class="box-strong" x="330" y="20" width="320" height="100" rx="6"/>
+      <text x="490" y="44" font-size="11" text-anchor="middle" font-weight="600">VALUE</text>
+      <text class="dim" x="490" y="64" font-size="10.5" text-anchor="middle">every field for this one loan</text>
+      <text class="dim" x="490" y="82" font-size="10.5" text-anchor="middle">PROCESS_TYPE, BALANCE,</text>
+      <text class="dim" x="490" y="98" font-size="10.5" text-anchor="middle">LOAN_LINE_TYPE, and 17 more</text>
+    </svg>
+    <figcaption>One key, one bundle of fields. No joins at read time — everything about a loan is already in one place, which is the entire point of this project.</figcaption>
+  </figure>
+
+  <h2>The whole flow</h2>
+
+  <figure class="fig">
+    <p class="fig-title">4 raw sources → one function call → 2 Bigtable rows</p>
+    <svg viewBox="0 0 880 400" role="img" aria-label="Four raw dummy-data sources are joined by obligor and obligation number inside build_records, which produces one Table A row of 20 fields, four of which are then copied into a Table B row.">
+      <defs>
+        <marker id="arrow1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- source boxes -->
+      <rect class="box" x="20" y="20" width="230" height="70" rx="6"/>
+      <text x="34" y="46" font-size="12.5" font-weight="600">LCM record</text>
+      <text class="dim" x="34" y="64" font-size="11">the driver — 1 row</text>
+
+      <rect class="box" x="20" y="104" width="230" height="70" rx="6"/>
+      <text x="34" y="130" font-size="12.5" font-weight="600">Charge-amount rows</text>
+      <text class="dim" x="34" y="148" font-size="11">5 rows for this loan</text>
+
+      <rect class="box" x="20" y="188" width="230" height="70" rx="6"/>
+      <text x="34" y="214" font-size="12.5" font-weight="600">Billing-schedule rows</text>
+      <text class="dim" x="34" y="232" font-size="11">4 rows for this loan</text>
+
+      <rect class="box" x="20" y="272" width="230" height="70" rx="6"/>
+      <text x="34" y="298" font-size="12.5" font-weight="600">Balance + transaction</text>
+      <text class="dim" x="34" y="316" font-size="11">1 balance row + 1 txn row</text>
+
+      <!-- transform -->
+      <rect class="box-strong" x="330" y="150" width="190" height="90" rx="6"/>
+      <text x="425" y="187" font-size="12.5" font-weight="600" text-anchor="middle">build_records()</text>
+      <text class="dim" x="425" y="205" font-size="11" text-anchor="middle">one call per loan</text>
+      <text class="lbl" x="425" y="262" font-size="11" text-anchor="middle">joined on obligor + obligation number</text>
+
+      <!-- converging arrows into transform -->
+      <path class="arrow" d="M250,55 C 290,55 290,150 330,180" marker-end="url(#arrow1)"/>
+      <path class="arrow" d="M250,139 C 280,139 300,170 330,190" marker-end="url(#arrow1)"/>
+      <path class="arrow" d="M250,223 C 280,223 300,215 330,200" marker-end="url(#arrow1)"/>
+      <path class="arrow" d="M250,307 C 290,307 290,220 330,210" marker-end="url(#arrow1)"/>
+
+      <!-- transform to Table A -->
+      <path class="arrow" d="M520,195 C 560,195 560,140 600,140" marker-end="url(#arrow1)"/>
+
+      <!-- Table A -->
+      <rect class="box-strong" x="600" y="20" width="260" height="250" rx="6"/>
+      <text x="615" y="45" font-size="13" font-weight="600">Table A — obligations_full</text>
+      <text x="615" y="68" font-size="11.5">14 straight-copy fields</text>
+      <text x="615" y="88" font-size="11.5">∑ LOAN_LINE_TYPE — resolved</text>
+      <text x="615" y="108" font-size="11.5">∑ CURR_PRIN_BAL_AMT — obligor sum</text>
+      <text x="615" y="128" font-size="11.5">∑ CURR_LINE_AMT — obligor sum</text>
+      <text x="615" y="148" font-size="11.5">∑ INTEREST_PAID_YTD — filtered sum</text>
+      <text x="615" y="168" font-size="11.5">∑ INT_PAYMENT_DATE — filtered latest</text>
+      <text x="615" y="188" font-size="11.5">∑ BALANCE — combined + flipped</text>
+      <text class="dim" x="615" y="215" font-size="11">20 fields, one row per loan</text>
+
+      <!-- Table A to Table B -->
+      <path class="arrow" d="M730,270 L730,300" marker-end="url(#arrow1)"/>
+      <text class="lbl" x="745" y="289" font-size="11">copies 4 fields</text>
+
+      <!-- Table B -->
+      <rect class="box" x="600" y="300" width="260" height="78" rx="6"/>
+      <text x="615" y="324" font-size="13" font-weight="600">Table B — obligations_essential</text>
+      <text class="dim" x="615" y="343" font-size="11">OBLIGOR_NUMBER, OBLIGATION_NUMBER,</text>
+      <text class="dim" x="615" y="360" font-size="11">PROCESS_TYPE, LOAN_LINE_TYPE</text>
+    </svg>
+    <figcaption>7 of the 20 fields actually calculate something (marked ∑ below) — everything else in Table A is copied or reformatted straight from one source field. Table B is just 4 of Table A's fields, copied again.</figcaption>
+  </figure>
+
+  <h2>Every column, mapped</h2>
+  <p class="context" style="margin-bottom:20px">Every one of Table A's 20 fields, grouped by where it comes from. Each card is <strong>source field → transform → output field</strong>. The 7 calculated ones link down to a full walk-through.</p>
+
+  <div class="atlas-group">
+    <h3>From the LCM driver record — padded or copied as-is</h3>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="applicationSourceKey_foreignKey_obligorNumber value 10000 is left-padded to 11 digits to produce OBLIGOR_NUMBER 00000010000.">
+      <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">lcm · foreignKey_obligorNumber</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"10000"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a1)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">pad to 11</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">OBLIGOR_NUMBER</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= 00000010000</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="applicationSourceKey_foreignKey_obligationNumber value 1000 is left-padded to 10 digits to produce OBLIGATION_NUMBER 0000001000.">
+      <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">lcm · foreignKey_obligationNumber</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"1000"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a2)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">pad to 10</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">OBLIGATION_NUMBER</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= 0000001000</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="processTypeCode CRBRN-N is copied as-is to PROCESS_TYPE.">
+      <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">lcm · processTypeCode</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"CRBRN-N"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a3)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">copy</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">PROCESS_TYPE</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= CRBRN-N</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="loanTerms_onlineBankingEligibleIndicator 1 becomes OB_ELIGIBLE_IND 1.">
+      <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">lcm · onlineBankingEligibleIndicator</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"1"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a4)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">flag</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">OB_ELIGIBLE_IND</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= 1</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="payoff_paidLoanEligibleCode 0 trimmed to 2 characters becomes PAID_ELIGIBLE_CODE 0.">
+      <defs><marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">lcm · payoff_paidLoanEligibleCode</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"0"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a5)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">first 2 chars</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">PAID_ELIGIBLE_CODE</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= 0</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="processTypeCode CRBRN-N, the same field used for PROCESS_TYPE, is copied again to PROCESS_TYPE_CODE.">
+      <defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">lcm · processTypeCode (same field again)</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"CRBRN-N"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a6)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">copy</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">PROCESS_TYPE_CODE</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= CRBRN-N</text>
+    </svg></div>
+    <p class="atlas-note">The lineage sheet marks PROCESS_TYPE_CODE "Hardcoded" but never says to what — so the code just reuses PROCESS_TYPE's own source field instead of inventing a value.</p>
+  </div>
+
+  <div class="atlas-group">
+    <h3>From other lookup topics — copied as-is</h3>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="customer_supplementals bank number 001 is copied as-is to BANK.">
+      <defs><marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">customer_supplementals · bankNumber</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"001"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a7)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">copy</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">BANK</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= 001</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="No relationship row exists for this loan, so takedownObligationNumber is missing and FUT_OBLIGATION_NUM is left blank.">
+      <defs><marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">relationships · takedownObligationNumber</text>
+      <text class="dim" x="18" y="46" font-size="12.5" font-style="italic">no row for this loan</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a8)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">pad to 10</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">FUT_OBLIGATION_NUM</text>
+      <text x="310" y="46" font-size="13" font-weight="700" font-style="italic">= (blank)</text>
+    </svg></div>
+    <p class="atlas-note">This field only gets a value when a loan is a draw against a parent line. Loan A isn't one, so it's blank here — not missing data, just nothing to point to.</p>
+  </div>
+
+  <div class="atlas-group">
+    <h3>From the posted-transaction row — copied or reformatted</h3>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="The posted transaction's effectiveDate is copied as-is to EFFECTIVE_DATE.">
+      <defs><marker id="a9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">posted txn · effectiveDate</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"2026-09-01"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a9)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">copy</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">EFFECTIVE_DATE</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= 2026-09-01</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="transactionAmount 500.00 with chargeCode 10 produces TRAN_AMOUNT 500.00, signed by the charge code the same way BALANCE is.">
+      <defs><marker id="a10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">posted txn · transactionAmount + chargeCode</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"500.00" · code 10</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a10)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">sign by code</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">TRAN_AMOUNT</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= 500.00</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="transactionDescription AdvanceCurrent trimmed to 30 characters becomes TRANSACTION_DESC.">
+      <defs><marker id="a11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">posted txn · transactionDescription</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"AdvanceCurrent"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a11)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">first 30 chars</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">TRANSACTION_DESC</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= AdvanceCurrent</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="transactionRecordedTimestamp is reformatted to ISO 8601 and shifted to the minus 5 offset to become TRANSACTION_TMSTMP.">
+      <defs><marker id="a12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">posted txn · transactionRecordedTimestamp</text>
+      <text x="18" y="46" font-size="11.5" font-weight="600">"2026-09-01T10:00:00"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a12)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">to ISO −05:00</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">TRANSACTION_TMSTMP</text>
+      <text x="310" y="46" font-size="12" font-weight="700">= 2026-09-01T10:00:00-05:00</text>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="postedBalanceChargeCode 10 is copied as-is to CHARGE_CODE.">
+      <defs><marker id="a13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">posted txn · postedBalanceChargeCode</text>
+      <text x="18" y="46" font-size="12.5" font-weight="600">"10"</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a13)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">copy</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">CHARGE_CODE</text>
+      <text x="310" y="46" font-size="13" font-weight="700">= 10</text>
+    </svg></div>
+    <p class="atlas-note">These 5, plus SEQUENCE_NUMBER below, only appear on the row at all when this obligation has at least one posted transaction — see <code>build_records()</code>'s <code>if posted_txn_recs:</code> block.</p>
+  </div>
+
+  <div class="atlas-group">
+    <h3>Calculated — built from more than one row, not a straight copy</h3>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="processTypeCode's 5th character, or a parent chain walk, decides LOAN_LINE_TYPE. Jump to the full figure below.">
+      <defs><marker id="a14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">lcm.processTypeCode + relationships</text>
+      <text class="dim" x="18" y="46" font-size="11.5" font-style="italic">5th char, or parent chain</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a14)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">∑ decide</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">LOAN_LINE_TYPE</text>
+      <text x="310" y="42" font-size="13" font-weight="700">= Loan</text>
+      <a xlink:href="#fig-loan-line-type"><text class="jump" x="310" y="56">see the decision tree ↓</text></a>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="Summed across every eligible Loan this obligor has, CURR_PRIN_BAL_AMT becomes 22500.00. Jump to the full figure below.">
+      <defs><marker id="a15" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">lcm.currentLegalBalance — all of obligor's loans</text>
+      <text class="dim" x="18" y="46" font-size="11.5" font-style="italic">15000.00 + 7500.00</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a15)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">∑ sum</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">CURR_PRIN_BAL_AMT</text>
+      <text x="310" y="42" font-size="13" font-weight="700">= 22500.00</text>
+      <a xlink:href="#fig-obligor-totals"><text class="jump" x="310" y="56">see the obligor roll-up ↓</text></a>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="This obligor has no resolved Line, so CURR_LINE_AMT stays null. Jump to the full figure below.">
+      <defs><marker id="a16" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">line_rec.noteAmount — distinct lines only</text>
+      <text class="dim" x="18" y="46" font-size="11.5" font-style="italic">no resolved Line for this obligor</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a16)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">∑ sum</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">CURR_LINE_AMT</text>
+      <text x="310" y="42" font-size="13" font-weight="700" font-style="italic">= null</text>
+      <a xlink:href="#fig-obligor-totals"><text class="jump" x="310" y="56">see the obligor roll-up ↓</text></a>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="Two of five charge rows qualify and are summed to 200.00 for INTEREST_PAID_YTD. Jump to the full figure below.">
+      <defs><marker id="a17" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">chargeheader_amounts — 5 rows, filtered</text>
+      <text class="dim" x="18" y="46" font-size="11.5" font-style="italic">code 1000-1020 · CHGH260 · PAID</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a17)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">∑ filter+sum</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">INTEREST_PAID_YTD</text>
+      <text x="310" y="42" font-size="13" font-weight="700">= 200.00</text>
+      <a xlink:href="#fig-interest-paid-ytd"><text class="jump" x="310" y="56">see the filter walk-through ↓</text></a>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="The latest qualifying billing row's bill date, 2026-10-01, becomes INT_PAYMENT_DATE. Jump to the full figure below.">
+      <defs><marker id="a18" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">billingschedules — 4 rows, filtered</text>
+      <text class="dim" x="18" y="46" font-size="11.5" font-style="italic">code 1000 · Billing/Repayment · latest due</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a18)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">∑ filter+pick</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">INT_PAYMENT_DATE</text>
+      <text x="310" y="42" font-size="13" font-weight="700">= 2026-10-01</text>
+      <a xlink:href="#fig-int-payment-date"><text class="jump" x="310" y="56">see the filter walk-through ↓</text></a>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="Base balance plus the latest transaction, sign-flipped by charge code, produces BALANCE negative 15500.00. Jump to the full figure below.">
+      <defs><marker id="a19" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">balanceheader_amounts + posted txn</text>
+      <text class="dim" x="18" y="46" font-size="11.5" font-style="italic">15000.00 + 500.00, then flip sign</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a19)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">∑ combine</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">BALANCE</text>
+      <text x="310" y="42" font-size="13" font-weight="700">= -15500.00</text>
+      <a xlink:href="#fig-balance"><text class="jump" x="310" y="56">see the combine walk-through ↓</text></a>
+    </svg></div>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="The chosen transaction's rank among this obligation's own transactions, oldest first, gives SEQUENCE_NUMBER 1. Jump to the full figure below.">
+      <defs><marker id="a20" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">posted txns for this obligation — ranked</text>
+      <text class="dim" x="18" y="46" font-size="11.5" font-style="italic">oldest-first, this loan has 1 txn</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a20)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">∑ rank</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">SEQUENCE_NUMBER</text>
+      <text x="310" y="42" font-size="13" font-weight="700">= 1</text>
+      <a xlink:href="#fig-sequence-number"><text class="jump" x="310" y="56">see the ranking walk-through ↓</text></a>
+    </svg></div>
+  </div>
+
+  <div class="atlas-group">
+    <h3>Built by gluing two already-computed fields together</h3>
+
+    <div class="acard"><svg viewBox="0 0 640 68" role="img" aria-label="OBLIGOR_NUMBER and OBLIGATION_NUMBER, both computed above, are joined with a hash to form the Bigtable row key.">
+      <defs><marker id="a21" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect class="box" x="6" y="6" width="246" height="56" rx="6"/>
+      <text class="dim" x="18" y="24" font-size="9.5">OBLIGOR_NUMBER + "#" + OBLIGATION_NUMBER</text>
+      <text class="dim" x="18" y="46" font-size="11.5" font-style="italic">both already built above</text>
+      <path class="arrow" d="M256,34 L292,34" marker-end="url(#a21)"/>
+      <text class="lbl" x="274" y="25" font-size="9" text-anchor="middle">concatenate</text>
+      <rect class="box-strong" x="296" y="6" width="338" height="56" rx="6"/>
+      <text class="dim" x="310" y="24" font-size="9.5">_row_key</text>
+      <text x="310" y="46" font-size="12" font-weight="700">= 00000010000#0000001000</text>
+    </svg></div>
+    <p class="atlas-note">This is the Bigtable key from Figure 0b above — it's how both Table A and Table B get looked up, no scanning required.</p>
+  </div>
+
+  <h2>The 7 fields that calculate something</h2>
+
+  <figure class="fig" id="fig-loan-line-type">
+    <p class="fig-title">LOAN_LINE_TYPE — a decision tree, not a sum</p>
+    <svg viewBox="0 0 680 320" role="img" aria-label="The 5th character of processTypeCode picks one of three branches: N means Loan directly, H means look at this record's own account status, and anything else means walk the parent chain until an H-type ancestor is found and apply the same status rule there. Loan A's code is CRBRN-N, 5th character N, so it resolves straight to Loan.">
+      <defs>
+        <marker id="arrow5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box-strong" x="250" y="14" width="180" height="46" rx="6"/>
+      <text x="340" y="36" font-size="11.5" text-anchor="middle" font-weight="600">processTypeCode</text>
+      <text class="dim" x="340" y="52" font-size="10" text-anchor="middle">"CRBRN-N" → 5th char</text>
+
+      <path class="arrow" d="M300,60 C 260,90 120,100 90,118" marker-end="url(#arrow5)"/>
+      <path class="arrow" d="M340,60 L340,118" marker-end="url(#arrow5)"/>
+      <path class="arrow-drop" d="M380,60 C 440,90 580,100 600,118" marker-end="url(#arrow5)"/>
+
+      <text class="lbl" x="90" y="108" font-size="11" text-anchor="middle" font-weight="700">5th = N</text>
+      <text class="lbl" x="340" y="108" font-size="11" text-anchor="middle" font-weight="700">5th = H</text>
+      <text class="dim" x="600" y="108" font-size="11" text-anchor="middle">anything else (e.g. T)</text>
+
+      <rect class="box-strong" x="10" y="118" width="160" height="40" rx="6"/>
+      <text x="90" y="143" font-size="12" text-anchor="middle" font-weight="700">→ Loan</text>
+
+      <rect class="box" x="260" y="118" width="160" height="56" rx="6"/>
+      <text x="340" y="140" font-size="10.5" text-anchor="middle">own accountStatusCode</text>
+      <text class="dim" x="340" y="156" font-size="9.5" text-anchor="middle">1/2/8→Loan · 0→Line · else→null</text>
+
+      <rect class="box" x="500" y="118" width="200" height="56" rx="5" opacity="0.6"/>
+      <text class="dim" x="600" y="140" font-size="10.5" text-anchor="middle">walk takedown chain to parent</text>
+      <text class="dim" x="600" y="156" font-size="9.5" text-anchor="middle">until an H-type ancestor is found</text>
+      <line class="arrow-drop" x1="600" y1="174" x2="600" y2="210"/>
+      <text class="dim" x="600" y="222" font-size="10" text-anchor="middle">— no parent at all? → still "Loan"</text>
+
+      <path class="arrow" d="M90,158 L90,232" marker-end="url(#arrow5)"/>
+      <rect class="box-strong" x="10" y="232" width="160" height="46" rx="6"/>
+      <text x="90" y="260" font-size="13" text-anchor="middle" font-weight="700">LOAN_LINE_TYPE = Loan</text>
+
+      <rect class="box" x="260" y="200" width="160" height="40" rx="6" opacity="0.55"/>
+      <text class="dim" x="340" y="224" font-size="10" text-anchor="middle">(not this loan's path)</text>
+    </svg>
+    <figcaption>Loan A's 5th character is "N", so it resolves on the left branch immediately — no chain walk needed. The middle and right branches exist for H-type and T-type loans elsewhere in the data, not for this one.</figcaption>
+  </figure>
+
+  <figure class="fig" id="fig-obligor-totals">
+    <p class="fig-title">CURR_PRIN_BAL_AMT / CURR_LINE_AMT — add up every loan this obligor has, not just this one</p>
+    <svg viewBox="0 0 680 280" role="img" aria-label="Obligor 10000 has two loan records, Loan A with balance 15000 and Loan B with balance 7500, both eligible and both type Loan, so they are summed to 22500 for CURR_PRIN_BAL_AMT. The obligor has no resolved Line record, so CURR_LINE_AMT stays null.">
+      <defs>
+        <marker id="arrow6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text class="dim" x="20" y="18" font-size="10.5" letter-spacing="0.03em">EVERY LCM RECORD BELONGING TO OBLIGOR 10000</text>
+      <rect class="box-strong" x="20" y="28" width="220" height="56" rx="6"/>
+      <text x="35" y="50" font-size="11.5" font-weight="600">Loan A (this loan)</text>
+      <text class="dim" x="35" y="68" font-size="10">eligible · type Loan · bal 15000.00</text>
+
+      <rect class="box" x="260" y="28" width="220" height="56" rx="6"/>
+      <text x="275" y="50" font-size="11.5" font-weight="600">Loan B (same obligor)</text>
+      <text class="dim" x="275" y="68" font-size="10">eligible · type Loan · bal 7500.00</text>
+
+      <rect class="box" x="500" y="28" width="160" height="56" rx="5" opacity="0.55"/>
+      <text class="dim" x="580" y="50" font-size="10.5" text-anchor="middle">no Line record</text>
+      <text class="dim" x="580" y="66" font-size="9.5" text-anchor="middle">resolved for this obligor</text>
+
+      <path class="arrow" d="M130,84 C 130,120 280,140 300,150" marker-end="url(#arrow6)"/>
+      <path class="arrow" d="M370,84 C 370,120 320,140 320,150" marker-end="url(#arrow6)"/>
+
+      <rect class="box-strong" x="220" y="150" width="200" height="46" rx="6"/>
+      <text x="320" y="169" font-size="11.5" text-anchor="middle" font-weight="600">15000.00 + 7500.00</text>
+      <text class="dim" x="320" y="186" font-size="10" text-anchor="middle">eligible Loans only, once each</text>
+
+      <path class="arrow" d="M320,196 L320,218" marker-end="url(#arrow6)"/>
+      <rect class="box-strong" x="200" y="218" width="240" height="44" rx="6"/>
+      <text x="320" y="245" font-size="12.5" text-anchor="middle" font-weight="700">CURR_PRIN_BAL_AMT = 22500.00</text>
+
+      <line class="arrow-drop" x1="580" y1="84" x2="580" y2="218"/>
+      <rect class="box" x="480" y="218" width="200" height="44" rx="6" opacity="0.7"/>
+      <text class="dim" x="580" y="236" font-size="10.5" text-anchor="middle">nothing to sum</text>
+      <text x="580" y="252" font-size="12" text-anchor="middle" font-weight="700" font-style="italic">CURR_LINE_AMT = null</text>
+    </svg>
+    <figcaption>Both of these run once per obligor, across <em>every</em> obligation they have — that's why Loan A and Loan B (same obligor) would show the identical 22500.00, not two different numbers. CURR_LINE_AMT would add each distinct resolved line's noteAmount, once, however many draws sit under it — this obligor just doesn't have one.</figcaption>
+  </figure>
+
+  <figure class="fig" id="fig-interest-paid-ytd">
+    <p class="fig-title">INTEREST_PAID_YTD — filter, then add up what's left</p>
+    <svg viewBox="0 0 680 300" role="img" aria-label="Of five charge rows, two qualify by charge code, field name and paid status, and are summed to 200.00; the other three are dropped for failing one of those conditions.">
+      <defs>
+        <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="14" y="20" width="118" height="50" rx="5"/>
+      <text x="73" y="40" font-size="12" font-weight="600" text-anchor="middle">120.00</text>
+      <text class="dim" x="73" y="56" font-size="9.5" text-anchor="middle">1000·CHGH260·PAID</text>
+
+      <rect class="box" x="144" y="20" width="118" height="50" rx="5"/>
+      <text x="203" y="40" font-size="12" font-weight="600" text-anchor="middle">80.00</text>
+      <text class="dim" x="203" y="56" font-size="9.5" text-anchor="middle">1010·CHGH260·PAID</text>
+
+      <rect class="box" x="274" y="20" width="118" height="50" rx="5" opacity="0.55"/>
+      <text class="dim" x="333" y="40" font-size="12" text-anchor="middle">999.00</text>
+      <text class="dim" x="333" y="56" font-size="9.5" text-anchor="middle">code 1030 — out of range</text>
+
+      <rect class="box" x="404" y="20" width="118" height="50" rx="5" opacity="0.55"/>
+      <text class="dim" x="463" y="40" font-size="12" text-anchor="middle">555.00</text>
+      <text class="dim" x="463" y="56" font-size="9.5" text-anchor="middle">UNPAID</text>
+
+      <rect class="box" x="534" y="20" width="118" height="50" rx="5" opacity="0.55"/>
+      <text class="dim" x="593" y="40" font-size="12" text-anchor="middle">444.00</text>
+      <text class="dim" x="593" y="56" font-size="9.5" text-anchor="middle">field is CHGH999</text>
+
+      <path class="arrow" d="M73,70 C 73,120 220,150 280,158" marker-end="url(#arrow2)"/>
+      <path class="arrow" d="M203,70 C 203,110 260,145 300,158" marker-end="url(#arrow2)"/>
+      <line class="arrow-drop" x1="333" y1="70" x2="333" y2="104"/>
+      <line class="arrow-drop" x1="463" y1="70" x2="463" y2="104"/>
+      <line class="arrow-drop" x1="593" y1="70" x2="593" y2="104"/>
+      <g class="dim" font-size="13" text-anchor="middle">
+        <text x="333" y="112">✕</text><text x="463" y="112">✕</text><text x="593" y="112">✕</text>
+      </g>
+
+      <rect class="box-strong" x="240" y="158" width="200" height="46" rx="6"/>
+      <text x="340" y="177" font-size="12" text-anchor="middle" font-weight="600">120.00 + 80.00</text>
+      <text class="dim" x="340" y="194" font-size="10.5" text-anchor="middle">only the kept rows</text>
+
+      <path class="arrow" d="M340,204 L340,226" marker-end="url(#arrow2)"/>
+      <rect class="box-strong" x="230" y="226" width="220" height="46" rx="6"/>
+      <text x="340" y="254" font-size="13" font-weight="700" text-anchor="middle">INTEREST_PAID_YTD = 200.00</text>
+    </svg>
+    <figcaption>Charge code must be 1000–1020, the field must be CHGH260, and it must be marked PAID — all three, or the row is dropped.</figcaption>
+  </figure>
+
+  <figure class="fig" id="fig-int-payment-date">
+    <p class="fig-title">INT_PAYMENT_DATE — filter, then take the latest due date</p>
+    <svg viewBox="0 0 680 300" role="img" aria-label="Of four billing rows, two qualify by charge code and schedule type; the one with the latest due date, 2026-11-01, wins, and that row's bill date, 2026-10-01, becomes the output.">
+      <defs>
+        <marker id="arrow3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="19" y="20" width="150" height="50" rx="5"/>
+      <text x="94" y="40" font-size="11.5" font-weight="600" text-anchor="middle">due 2026-10-01</text>
+      <text class="dim" x="94" y="56" font-size="9.5" text-anchor="middle">1000 · Billing</text>
+
+      <rect class="box-strong" x="183" y="20" width="150" height="50" rx="5"/>
+      <text x="258" y="40" font-size="11.5" font-weight="600" text-anchor="middle">due 2026-11-01</text>
+      <text class="dim" x="258" y="56" font-size="9.5" text-anchor="middle">1000 · Repayment — latest</text>
+
+      <rect class="box" x="347" y="20" width="150" height="50" rx="5" opacity="0.55"/>
+      <text class="dim" x="422" y="40" font-size="11.5" text-anchor="middle">due 2026-12-01</text>
+      <text class="dim" x="422" y="56" font-size="9.5" text-anchor="middle">code 1010, not 1000</text>
+
+      <rect class="box" x="511" y="20" width="150" height="50" rx="5" opacity="0.55"/>
+      <text class="dim" x="586" y="40" font-size="11.5" text-anchor="middle">due 2027-01-01</text>
+      <text class="dim" x="586" y="56" font-size="9.5" text-anchor="middle">type "Other"</text>
+
+      <path class="arrow" d="M94,70 C 94,120 230,150 280,158" marker-end="url(#arrow3)"/>
+      <path class="arrow" d="M258,70 C 258,110 290,140 320,158" marker-end="url(#arrow3)"/>
+      <line class="arrow-drop" x1="422" y1="70" x2="422" y2="104"/>
+      <line class="arrow-drop" x1="586" y1="70" x2="586" y2="104"/>
+      <g class="dim" font-size="13" text-anchor="middle">
+        <text x="422" y="112">✕</text><text x="586" y="112">✕</text>
+      </g>
+
+      <rect class="box-strong" x="240" y="158" width="200" height="46" rx="6"/>
+      <text x="340" y="177" font-size="12" text-anchor="middle" font-weight="600">latest = 2026-11-01</text>
+      <text class="dim" x="340" y="194" font-size="10.5" text-anchor="middle">Repayment row wins</text>
+
+      <path class="arrow" d="M340,204 L340,226" marker-end="url(#arrow3)"/>
+      <rect class="box-strong" x="200" y="226" width="280" height="46" rx="6"/>
+      <text x="340" y="247" font-size="13" font-weight="700" text-anchor="middle">INT_PAYMENT_DATE = 2026-10-01</text>
+      <text class="dim" x="340" y="263" font-size="9.5" text-anchor="middle">the winning row's bill date, not its due date</text>
+    </svg>
+    <figcaption>The row with the latest qualifying due date wins — but the value reported is that row's <em>bill</em> date, not the due date itself.</figcaption>
+  </figure>
+
+  <figure class="fig" id="fig-balance">
+    <p class="fig-title">BALANCE — combine, then flip the sign if the charge code says so</p>
+    <svg viewBox="0 0 680 340" role="img" aria-label="A base balance of 15000 is added to a 500 AdvanceCurrent transaction to get 15500, which is then negated because the transaction's charge code is 10, giving a final balance of negative 15500.">
+      <defs>
+        <marker id="arrow4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="40" y="20" width="260" height="64" rx="6"/>
+      <text x="55" y="45" font-size="12" font-weight="600">base balance</text>
+      <text class="dim" x="55" y="63" font-size="10.5">BALH299 · code 10 → 15000.00</text>
+
+      <rect class="box" x="380" y="20" width="260" height="64" rx="6"/>
+      <text x="395" y="45" font-size="12" font-weight="600">latest transaction</text>
+      <text class="dim" x="395" y="63" font-size="10.5">AdvanceCurrent · 500.00 · code 10</text>
+
+      <path class="arrow" d="M170,84 C 170,110 280,110 300,120" marker-end="url(#arrow4)"/>
+      <path class="arrow" d="M510,84 C 510,110 400,110 380,120" marker-end="url(#arrow4)"/>
+
+      <rect class="box-strong" x="240" y="120" width="200" height="56" rx="6"/>
+      <text x="340" y="141" font-size="11.5" text-anchor="middle" font-weight="600">AdvanceCurrent → base + amount</text>
+      <text class="dim" x="340" y="159" font-size="10.5" text-anchor="middle">15000.00 + 500.00 = 15500.00</text>
+
+      <path class="arrow" d="M340,176 L340,206" marker-end="url(#arrow4)"/>
+      <rect class="box-strong" x="250" y="206" width="180" height="46" rx="6"/>
+      <text x="340" y="225" font-size="11.5" text-anchor="middle" font-weight="600">chargeCode = "10"</text>
+      <text class="dim" x="340" y="242" font-size="10.5" text-anchor="middle">→ negate (×-1)</text>
+
+      <path class="arrow" d="M340,252 L340,282" marker-end="url(#arrow4)"/>
+      <rect class="box-strong" x="230" y="282" width="220" height="46" rx="6"/>
+      <text x="340" y="310" font-size="13" font-weight="700" text-anchor="middle">BALANCE = -15500.00</text>
+    </svg>
+    <figcaption>A PayPrincipal transaction would subtract the balance from the amount instead of adding; any charge code other than 10 would skip the sign flip.</figcaption>
+  </figure>
+
+  <figure class="fig" id="fig-sequence-number">
+    <p class="fig-title">SEQUENCE_NUMBER — this loan's transactions, ranked oldest-first</p>
+    <svg viewBox="0 0 680 220" role="img" aria-label="This obligation has exactly one posted transaction. Sorted oldest-first among this obligation's own transactions, that transaction lands at rank 1, so SEQUENCE_NUMBER is 1 — not a database-wide maximum.">
+      <defs>
+        <marker id="arrow7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text class="dim" x="20" y="18" font-size="10.5" letter-spacing="0.03em">THIS OBLIGATION'S OWN POSTED TRANSACTIONS, SORTED OLDEST → NEWEST</text>
+      <rect class="box-strong" x="20" y="28" width="260" height="56" rx="6"/>
+      <text x="35" y="50" font-size="11.5" font-weight="600">rank 1 — AdvanceCurrent</text>
+      <text class="dim" x="35" y="68" font-size="10">the only transaction here · this is "chosen"</text>
+
+      <rect class="box" x="300" y="28" width="340" height="56" rx="5" opacity="0.5"/>
+      <text class="dim" x="470" y="50" font-size="10.5" text-anchor="middle">rank 2, 3, … — would appear here</text>
+      <text class="dim" x="470" y="68" font-size="10" text-anchor="middle">if this loan had more posted transactions</text>
+
+      <path class="arrow" d="M150,84 L150,118" marker-end="url(#arrow7)"/>
+      <rect class="box-strong" x="60" y="118" width="180" height="46" rx="6"/>
+      <text x="150" y="140" font-size="11.5" text-anchor="middle" font-weight="600">chosen txn is at rank 1</text>
+      <text class="dim" x="150" y="156" font-size="9.5" text-anchor="middle">1-based position in the sort</text>
+
+      <path class="arrow" d="M150,164 L150,186" marker-end="url(#arrow7)"/>
+      <rect class="box-strong" x="40" y="186" width="220" height="44" rx="6"/>
+      <text x="150" y="213" font-size="12.5" text-anchor="middle" font-weight="700">SEQUENCE_NUMBER = 1</text>
+    </svg>
+    <figcaption>This deliberately ranks transactions within the pipeline run itself, rather than reading "the current max in the destination table" — doing that safely across several parallel workers writing at once is still an open question for the business to answer (still-open ISSUE 2), so this is a placeholder numbering, not the final word.</figcaption>
+  </figure>
+
+  <p class="foot">The field-atlas cards above link down to every figure on this page — use your browser's back button (or <code>⌘/Ctrl + ←</code>) to jump back up to where you were.</p>
+
+  <h2>Raw input rows</h2>
+
+  <details class="src" open>
+    <summary><span class="fname">TOPIC_account_loanslinesleases_lcm.jsonl</span><span class="meta">the driver record</span></summary>
+    <pre><code>{
+  "accountLoanslinesleasesLcmId": "T23-000001",
+  "accountLoanslinesleaseId": "ACC-000001",
+  "applicationSourceKey_applicationSystem": "AFSVISION",
+  "applicationSourceKey_financialInstrumentNumber": "10000",
+  "applicationSourceKey_foreignKey_applicationNumber": "APP01",
+  "applicationSourceKey_foreignKey_bankNumber": "001",
+  <span class="k">"applicationSourceKey_foreignKey_obligationNumber": "1000",
+  "applicationSourceKey_foreignKey_obligorNumber": "10000",</span>
+  "externalSourceTicklerReference": null,
+  <span class="k">"processTypeCode": "CRBRN-N",
+  "valuations_currentLegalBalance": "15000.00",
+  "noteAmount": "20000.00",
+  "loanTerms_onlineBankingEligibleIndicator": "1",
+  "payoff_paidLoanEligibleCode": "0"</span>
+}</code></pre>
+  </details>
+
+  <details class="src">
+    <summary><span class="fname">account_loanslinesleases_chargeheaders_amounts.jsonl</span><span class="meta">5 rows → feeds INTEREST_PAID_YTD</span></summary>
+    <pre><code>{ "applicationSourceKey_chargeCode": "1000", "applicationSourceKey_amountFieldName": "CHGH260", "amountTypeDescription": "PAID",   "chargeAmount": "120.00" }
+{ "applicationSourceKey_chargeCode": "1010", "applicationSourceKey_amountFieldName": "CHGH260", "amountTypeDescription": "PAID",   "chargeAmount": "80.00"  }
+{ "applicationSourceKey_chargeCode": "1030", "applicationSourceKey_amountFieldName": "CHGH260", "amountTypeDescription": "PAID",   "chargeAmount": "999.00" }
+{ "applicationSourceKey_chargeCode": "1000", "applicationSourceKey_amountFieldName": "CHGH260", "amountTypeDescription": "UNPAID", "chargeAmount": "555.00" }
+{ "applicationSourceKey_chargeCode": "1000", "applicationSourceKey_amountFieldName": "CHGH999", "amountTypeDescription": "PAID",   "chargeAmount": "444.00" }</code></pre>
+  </details>
+
+  <details class="src">
+    <summary><span class="fname">TOPIC_account_loanslinesleases_billingschedules.jsonl</span><span class="meta">4 rows → feeds INT_PAYMENT_DATE</span></summary>
+    <pre><code>{ "chargeCode": "1000", "billingScheduleType": "Billing",   "billDate": "2026-09-01", "billDueDate": "2026-10-01" }
+{ "chargeCode": "1000", "billingScheduleType": "Repayment", "billDate": "2026-10-01", "billDueDate": "2026-11-01" }
+{ "chargeCode": "1010", "billingScheduleType": "Billing",   "billDate": "2026-11-01", "billDueDate": "2026-12-01" }
+{ "chargeCode": "1000", "billingScheduleType": "Other",     "billDate": "2026-12-01", "billDueDate": "2027-01-01" }</code></pre>
+  </details>
+
+  <details class="src">
+    <summary><span class="fname">balanceheaders_amounts + postedtransactions</span><span class="meta">feeds BALANCE</span></summary>
+    <pre><code>// balanceheaders_amounts (base balance)
+{ "applicationSourceKey_amountFieldName": "BALH299", "applicationSourceKey_balanceCode": "10", "balanceAmount": "15000.00" }
+
+// postedtransactions (the only transaction on this loan)
+{ "transactionDescription": "AdvanceCurrent", "transactionAmount": "500.00", "postedBalanceChargeCode": "10",
+  "effectiveDate": "2026-09-01", "transactionRecordedTimestamp": "2026-09-01T10:00:00" }</code></pre>
+  </details>
+
+  <div class="divider">build_records() transforms this</div>
+
+  <h2>Table A — <code style="font-family:var(--mono)">obligations_full</code> output row</h2>
+  <div class="out">
+    <div class="row"><span class="fname">OBLIGOR_NUMBER</span><span class="fval">00000010000</span><span class="fnote">padded from "10000"</span></div>
+    <div class="row"><span class="fname">BANK</span><span class="fval">001</span><span class="fnote">from customer_supplementals</span></div>
+    <div class="row"><span class="fname">OBLIGATION_NUMBER</span><span class="fval">0000001000</span><span class="fnote">padded from "1000"</span></div>
+    <div class="row"><span class="fname">PROCESS_TYPE</span><span class="fval">CRBRN-N</span><span class="fnote">copied as-is</span></div>
+    <div class="row"><span class="fname">OB_ELIGIBLE_IND</span><span class="fval">1</span><span class="fnote">copied as-is</span></div>
+    <div class="row"><span class="fname">PAID_ELIGIBLE_CODE</span><span class="fval">0</span><span class="fnote">first 2 chars</span></div>
+    <div class="row"><span class="fname">PROCESS_TYPE_CODE</span><span class="fval">CRBRN-N</span><span class="fnote">same source as PROCESS_TYPE</span></div>
+    <div class="row"><span class="fname">FUT_OBLIGATION_NUM</span><span class="fval null">(blank)</span><span class="fnote">no parent — this loan isn't a draw</span></div>
+    <div class="row calc"><span class="fname">LOAN_LINE_TYPE</span><span class="fval">Loan</span><span class="fnote">5th char of "CRBRN-N" is N — <a href="#fig-loan-line-type">tree ↓</a></span></div>
+    <div class="row calc"><span class="fname">CURR_PRIN_BAL_AMT</span><span class="fval">22500.00</span><span class="fnote">sum of this obligor's loans — <a href="#fig-obligor-totals">figure ↓</a></span></div>
+    <div class="row calc"><span class="fname">CURR_LINE_AMT</span><span class="fval null">null</span><span class="fnote">this obligor has no lines — <a href="#fig-obligor-totals">figure ↓</a></span></div>
+    <div class="row calc"><span class="fname">INTEREST_PAID_YTD</span><span class="fval">200.00</span><span class="fnote">2 of 5 charges qualify — <a href="#fig-interest-paid-ytd">figure ↓</a></span></div>
+    <div class="row calc"><span class="fname">INT_PAYMENT_DATE</span><span class="fval">2026-10-01</span><span class="fnote">2 of 4 bills qualify — <a href="#fig-int-payment-date">figure ↓</a></span></div>
+    <div class="row calc"><span class="fname">BALANCE</span><span class="fval">-15500.00</span><span class="fnote">base + txn, then sign-flipped — <a href="#fig-balance">figure ↓</a></span></div>
+    <div class="row"><span class="fname">EFFECTIVE_DATE</span><span class="fval">2026-09-01</span><span class="fnote">from the posted transaction</span></div>
+    <div class="row"><span class="fname">TRAN_AMOUNT</span><span class="fval">500.00</span><span class="fnote">transactionAmount</span></div>
+    <div class="row"><span class="fname">TRANSACTION_DESC</span><span class="fval">AdvanceCurrent</span><span class="fnote">first 30 chars</span></div>
+    <div class="row"><span class="fname">TRANSACTION_TMSTMP</span><span class="fval">2026-09-01T10:00:00-05:00</span><span class="fnote">reformatted to ISO −05:00</span></div>
+    <div class="row"><span class="fname">CHARGE_CODE</span><span class="fval">10</span><span class="fnote">postedBalanceChargeCode</span></div>
+    <div class="row calc"><span class="fname">SEQUENCE_NUMBER</span><span class="fval">1</span><span class="fnote">only transaction on this loan → rank 1 — <a href="#fig-sequence-number">figure ↓</a></span></div>
+    <div class="row"><span class="fname">_row_key</span><span class="fval">00000010000#0000001000</span><span class="fnote">OBLIGOR_NUMBER + "#" + OBLIGATION_NUMBER</span></div>
+  </div>
+
+  <h2>Table B — <code style="font-family:var(--mono)">obligations_essential</code> output row</h2>
+  <p class="context" style="margin-bottom:16px">All 4 fields below are straight copies of the same-named fields in Table A above — same source, same transform, no new logic lives here.</p>
+  <div class="out">
+    <div class="row"><span class="fname">OBLIGOR_NUMBER</span><span class="fval">00000010000</span><span class="fnote"></span></div>
+    <div class="row"><span class="fname">OBLIGATION_NUMBER</span><span class="fval">0000001000</span><span class="fnote"></span></div>
+    <div class="row"><span class="fname">PROCESS_TYPE</span><span class="fval">CRBRN-N</span><span class="fnote"></span></div>
+    <div class="row"><span class="fname">LOAN_LINE_TYPE</span><span class="fval">Loan</span><span class="fnote"></span></div>
+  </div>
+
+</div>
+
+</body></html>
